@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1').replace(/\/$/, '');
 
 function App() {
   const [balance, setBalance] = useState(0);
@@ -13,21 +13,27 @@ function App() {
 
   const fetchBalance = async () => {
     try {
+      console.log(`Fetching balance from: ${API_BASE_URL}/balance/`);
       const res = await fetch(`${API_BASE_URL}/balance/`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       setBalance(data.balance_paise);
     } catch (e) {
-      console.error(e);
+      console.error("Balance fetch failed:", e);
+      setError(`Failed to fetch balance: ${e.message}`);
     }
   };
 
   const fetchPayouts = async () => {
     try {
+      console.log(`Fetching payouts from: ${API_BASE_URL}/payouts/`);
       const res = await fetch(`${API_BASE_URL}/payouts/`);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       const data = await res.json();
       setPayouts(data);
     } catch (e) {
-      console.error(e);
+      console.error("Payouts fetch failed:", e);
+      setError(`Failed to fetch payouts: ${e.message}`);
     }
   };
 
