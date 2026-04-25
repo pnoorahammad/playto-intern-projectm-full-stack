@@ -11,3 +11,4 @@ class IdempotencyKey(models.Model):
     class Meta:
         db_table = 'idempotency_key'
         unique_together = ('merchant', 'key')
+        app_label = 'payout_engine'

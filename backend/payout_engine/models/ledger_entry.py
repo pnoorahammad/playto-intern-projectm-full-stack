@@ -34,3 +34,4 @@ class LedgerEntry(models.Model):
 
     class Meta:
         db_table = 'ledger_entry'
+        app_label = 'payout_engine'

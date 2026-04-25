@@ -18,3 +18,4 @@ class Payout(models.Model):
 
     class Meta:
         db_table = 'payout'
+        app_label = 'payout_engine'

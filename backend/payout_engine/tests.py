@@ -2,8 +2,9 @@ from django.test import TestCase, TransactionTestCase
 from rest_framework.test import APIClient
 from rest_framework import status
 import threading
-from .models.merchant import Merchant
-from .models.ledger_entry import LedgerEntry
+from payout_engine.models.merchant import Merchant
+from payout_engine.models.ledger_entry import LedgerEntry
+from unittest.mock import patch
 
 class PayoutConcurrencyTest(TransactionTestCase):
     def setUp(self):
@@ -33,17 +34,18 @@ class PayoutConcurrencyTest(TransactionTestCase):
             response = self.client.post('/api/v1/payouts/', {
                 'amount_paise': 60,
                 'bank_account_id': 'bank_123'
-            }, HTTP_IDEMPOTENCY_KEY=idem_key)
+            }, format='json', HTTP_IDEMPOTENCY_KEY=idem_key)
             results.append(response.status_code)
 
         # Different idempotency keys to trigger pure balance concurrency checks
-        t1 = threading.Thread(target=make_request, args=('key1',))
-        t2 = threading.Thread(target=make_request, args=('key2',))
+        with patch('payout_engine.views.process_payout_task.delay'):
+            t1 = threading.Thread(target=make_request, args=('key1',))
+            t2 = threading.Thread(target=make_request, args=('key2',))
 
-        t1.start()
-        t2.start()
-        t1.join()
-        t2.join()
+            t1.start()
+            t2.start()
+            t1.join()
+            t2.join()
 
         # One request must succeed (201), the other must fail on balance validation (400)
         self.assertIn(status.HTTP_201_CREATED, results)
@@ -68,18 +70,19 @@ class PayoutIdempotencyTest(TestCase):
             merchant = self.merchant
         self.client.force_authenticate(user=MockUser())
 
-    def test_idempotency_exact_duplicate(self):
+    @patch('payout_engine.views.process_payout_task.delay')
+    def test_idempotency_exact_duplicate(self, mock_delay):
         """
         Test that submitting the same request twice returns the exact same cached response.
         """
         payload = {'amount_paise': 100, 'bank_account_id': 'bank_123'}
         
         # First request
-        res1 = self.client.post('/api/v1/payouts/', payload, HTTP_IDEMPOTENCY_KEY='idem_test_999')
+        res1 = self.client.post('/api/v1/payouts/', payload, format='json', HTTP_IDEMPOTENCY_KEY='idem_test_999')
         self.assertEqual(res1.status_code, status.HTTP_201_CREATED)
 
         # Duplicate request
-        res2 = self.client.post('/api/v1/payouts/', payload, HTTP_IDEMPOTENCY_KEY='idem_test_999')
+        res2 = self.client.post('/api/v1/payouts/', payload, format='json', HTTP_IDEMPOTENCY_KEY='idem_test_999')
         self.assertEqual(res2.status_code, status.HTTP_201_CREATED)
         
         # Response body should be identical

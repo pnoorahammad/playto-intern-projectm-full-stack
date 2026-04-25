@@ -12,3 +12,4 @@ class Merchant(models.Model):
 
     class Meta:
         db_table = 'merchant'
+        app_label = 'payout_engine'
