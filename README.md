@@ -1,63 +1,95 @@
 # Playto Pay: Payout Engine
 
-A robust, production-grade fintech payout engine built with Django, Django REST Framework, PostgreSQL, and Celery.
+A production-grade, concurrency-safe, idempotent payout engine built with Django, PostgreSQL, Celery, and React.
 
-## Project Overview
-This project simulates the core infrastructure of a cross-border payments payout system. It strictly enforces financial integrity by replacing mutable balance fields with a deterministic append-only ledger and implementing absolute concurrency safety using PostgreSQL row-level locks. 
+## Live Deployment
+- **Frontend:** https://playto-intern-projectm-full-stack-1axo-3seswfi7j.vercel.app
+- **Backend API:** https://playto-intern-projectm-full-stack-1.onrender.com
 
 ## Tech Stack
-* **Backend:** Django, Django REST Framework
-* **Database:** PostgreSQL (Required for `SELECT FOR UPDATE` functionality)
-* **Async Workers:** Celery + Redis
-* **Frontend:** React (Vite)
+| Layer | Technology |
+|---|---|
+| Backend | Django 5 + Django REST Framework |
+| Database | PostgreSQL (row-level locking via `SELECT FOR UPDATE`) |
+| Async Workers | Celery + Redis |
+| Frontend | React + Vite |
+| Backend Hosting | Render |
+| Frontend Hosting | Vercel |
 
 ## Core Features
-1. **Idempotency:** Hardened against duplicate network requests via an `Idempotency-Key` tracking system that serializes duplicate calls safely.
-2. **Concurrency Safety:** Completely eliminates Check-Then-Act (TOCTOU) double-spend vulnerabilities using DB-level `SELECT ... FOR UPDATE` row locks.
-3. **Ledger Integrity:** Balances are derived dynamically via `Coalesce(Sum())` aggregations rather than a mutable integer field.
-4. **Atomic Refunds:** Celery workers simulate upstream bank interactions, executing localized atomic refunds automatically upon network failure.
+1. **Append-only Ledger** — Balance derived via SQL aggregation, never stored as mutable state
+2. **Concurrency Safety** — `SELECT ... FOR UPDATE` row locks eliminate double-spend race conditions
+3. **Idempotency** — Per-merchant `Idempotency-Key` tracking prevents duplicate payouts
+4. **Atomic Refunds** — Failed payout refunds committed in same transaction as status update
+5. **State Machine** — Strict `PENDING → PROCESSING → COMPLETED/FAILED` transitions
 
 ## API Documentation
+
+### Health Check
+`GET /`
+```json
+{"status": "API Running", "version": "v1", "service": "Playto Payout Engine"}
+```
+
+### Get Balance
+`GET /api/v1/balance/`
+```json
+{"balance_paise": 994000}
+```
+
+### List Payouts
+`GET /api/v1/payouts/`
+```json
+[
+  {
+    "id": 1,
+    "amount_paise": 6000,
+    "bank_account_id": "bank_abc",
+    "status": "COMPLETED",
+    "idempotency_key": "uuid-key-here",
+    "created_at": "2026-04-25T06:20:38Z"
+  }
+]
+```
 
 ### Create Payout
 `POST /api/v1/payouts/`
 
 **Headers:**
-* `Idempotency-Key` (Required): Unique UUID string per request.
-* `Authorization`: Bearer token
+```
+Idempotency-Key: <unique-uuid>
+Content-Type: application/json
+```
 
 **Body:**
 ```json
-{
-    "amount_paise": 6000,
-    "bank_account_id": "bank_123abc"
-}
+{"amount_paise": 6000, "bank_account_id": "bank_abc"}
 ```
 
-**Response (201 Created):**
+**Response (201):**
 ```json
-{
-    "payout_id": 142,
-    "status": "PENDING"
-}
+{"payout_id": 1, "status": "PENDING"}
 ```
 
-## Setup Instructions
+## Local Setup
 
-### Backend (Django)
-1. Clone the repository and `cd backend/`
-2. Create virtual environment: `python -m venv venv && source venv/bin/activate`
-3. Install dependencies: `pip install -r requirements.txt`
-4. Setup `.env` file with `DATABASE_URL` and `REDIS_URL`.
-5. Run migrations: `python manage.py migrate`
-6. Start Celery worker: `celery -A core worker -l INFO`
-7. Start server: `python manage.py runserver`
+### Backend
+```bash
+cd backend
+python -m venv venv && source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver
+```
 
-### Frontend (React)
-1. `cd frontend/`
-2. Install dependencies: `npm install`
-3. Create `.env.local` and add `VITE_API_BASE_URL=http://localhost:8000/api/v1`
-4. Start dev server: `npm run dev`
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## Architectural Details
-Please read the attached `EXPLAINER.md` for a deep dive into the ledger architecture, concurrency locks, state machine invariants, and atomic failure handling logic.
+Add `VITE_API_BASE_URL=http://localhost:8000/api/v1` to `frontend/.env.local`
+
+## Architecture
+See [EXPLAINER.md](./EXPLAINER.md) for deep-dive into ledger design, concurrency locks, idempotency, and state machine logic.
